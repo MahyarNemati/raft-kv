@@ -16,9 +16,9 @@ import (
 
 // Config is the full runtime configuration of a raftkv node.
 type Config struct {
-	ID     raft.NodeID
-	Peers  map[raft.NodeID]string // id -> base URL, including self
-	Listen string
+	ID      raft.NodeID
+	Peers   map[raft.NodeID]string // id -> base URL, including self
+	Listen  string
 	DataDir string
 
 	ElectionTimeout   time.Duration

@@ -146,35 +146,21 @@ func replay(r io.Reader) (raft.HardState, []raft.Entry, int64, error) {
 		offset  int64
 	)
 	br := bufio.NewReaderSize(r, 1<<20)
-	hdr := make([]byte, recHeaderSize)
 	for {
-		if _, err := io.ReadFull(br, hdr); err != nil {
-			return hard, entries, offset, nil
-		}
-		n := binary.LittleEndian.Uint32(hdr[0:4])
-		sum := binary.LittleEndian.Uint32(hdr[4:8])
-		typ := hdr[8]
-		if n > maxRecordSize {
-			return hard, entries, offset, nil
-		}
-		payload := make([]byte, n)
-		if _, err := io.ReadFull(br, payload); err != nil {
-			return hard, entries, offset, nil
-		}
-		c := crc32.Update(crc32.Checksum([]byte{typ}, crcTable), crcTable, payload)
-		if c != sum {
+		typ, payload, ok := readRecord(br)
+		if !ok {
 			return hard, entries, offset, nil
 		}
 		switch typ {
 		case recHardState:
-			hs, err := decodeHardState(payload)
-			if err != nil {
+			hs, ok := decodeHardState(payload)
+			if !ok {
 				return hard, entries, offset, nil
 			}
 			hard = hs
 		case recEntry:
-			e, err := decodeEntry(payload)
-			if err != nil {
+			e, ok := decodeEntry(payload)
+			if !ok {
 				return hard, entries, offset, nil
 			}
 			if len(entries) > 0 {
@@ -192,8 +178,31 @@ func replay(r io.Reader) (raft.HardState, []raft.Entry, int64, error) {
 		default:
 			return hard, entries, offset, nil
 		}
-		offset += int64(recHeaderSize) + int64(n)
+		offset += int64(recHeaderSize) + int64(len(payload))
 	}
+}
+
+// readRecord reads one record. ok is false at EOF and at the first torn or
+// corrupt record, which marks the end of the valid log.
+func readRecord(br *bufio.Reader) (typ byte, payload []byte, ok bool) {
+	var hdr [recHeaderSize]byte
+	if _, err := io.ReadFull(br, hdr[:]); err != nil {
+		return 0, nil, false
+	}
+	n := binary.LittleEndian.Uint32(hdr[0:4])
+	sum := binary.LittleEndian.Uint32(hdr[4:8])
+	typ = hdr[8]
+	if n > maxRecordSize {
+		return 0, nil, false
+	}
+	payload = make([]byte, n)
+	if _, err := io.ReadFull(br, payload); err != nil {
+		return 0, nil, false
+	}
+	if crc32.Update(crc32.Checksum([]byte{typ}, crcTable), crcTable, payload) != sum {
+		return 0, nil, false
+	}
+	return typ, payload, true
 }
 
 func (w *WAL) SetHardState(hs raft.HardState) error {
@@ -341,15 +350,15 @@ func encodeHardState(hs raft.HardState) []byte {
 	return append(b, hs.VotedFor...)
 }
 
-func decodeHardState(b []byte) (raft.HardState, error) {
+func decodeHardState(b []byte) (raft.HardState, bool) {
 	if len(b) < 10 {
-		return raft.HardState{}, errors.New("short hard state")
+		return raft.HardState{}, false
 	}
 	n := int(binary.LittleEndian.Uint16(b[8:10]))
 	if len(b) != 10+n {
-		return raft.HardState{}, errors.New("bad hard state length")
+		return raft.HardState{}, false
 	}
-	return raft.HardState{Term: binary.LittleEndian.Uint64(b[0:8]), VotedFor: raft.NodeID(b[10:])}, nil
+	return raft.HardState{Term: binary.LittleEndian.Uint64(b[0:8]), VotedFor: raft.NodeID(b[10:])}, true
 }
 
 func encodeEntry(e *raft.Entry) []byte {
@@ -360,9 +369,9 @@ func encodeEntry(e *raft.Entry) []byte {
 	return append(b, e.Data...)
 }
 
-func decodeEntry(b []byte) (raft.Entry, error) {
+func decodeEntry(b []byte) (raft.Entry, bool) {
 	if len(b) < 17 {
-		return raft.Entry{}, errors.New("short entry")
+		return raft.Entry{}, false
 	}
 	e := raft.Entry{
 		Index: binary.LittleEndian.Uint64(b[0:8]),
@@ -372,7 +381,7 @@ func decodeEntry(b []byte) (raft.Entry, error) {
 	if len(b) > 17 {
 		e.Data = append([]byte(nil), b[17:]...)
 	}
-	return e, nil
+	return e, true
 }
 
 func encodeSnapshot(s raft.Snapshot) []byte {

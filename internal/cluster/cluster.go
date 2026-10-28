@@ -175,7 +175,7 @@ func (c *Cluster) Restart(id raft.NodeID) error {
 	c.net.Register(id, node)
 	node.Start()
 	if c.opts.HTTP {
-		var h http.Handler = server.New(m.store, node, c.peerURL, c.opts.RequestTimeout, c.logger).Handler()
+		h := server.New(m.store, node, c.peerURL, c.opts.RequestTimeout, c.logger).Handler()
 		m.handler.Store(&h)
 	}
 	return nil

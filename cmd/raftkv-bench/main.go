@@ -15,6 +15,10 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	var o bench.Options
 	var workloads, paths, storages string
 	flag.IntVar(&o.Nodes, "nodes", 3, "cluster size")
@@ -66,8 +70,9 @@ func main() {
 		}
 	}
 	if failed {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func split(s string) []string {

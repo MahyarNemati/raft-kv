@@ -182,10 +182,10 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, nee
 	for attempt := 0; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			if isWrite && ambiguous {
-				return fmt.Errorf("%w: %w (last error: %v)", ErrOutcomeUnknown, err, lastErr)
+				return fmt.Errorf("%w: %w (last error: %w)", ErrOutcomeUnknown, err, lastErr)
 			}
 			if lastErr != nil {
-				return fmt.Errorf("client: %w (last error: %v)", err, lastErr)
+				return fmt.Errorf("client: %w (last error: %w)", err, lastErr)
 			}
 			return err
 		}

@@ -38,10 +38,6 @@ func (l *raftLog) term(i uint64) (uint64, bool) {
 	return l.entries[i-l.snapIndex()].Term, true
 }
 
-func (l *raftLog) entry(i uint64) Entry {
-	return l.entries[i-l.snapIndex()]
-}
-
 // slice returns a copy of entries in [lo, hi).
 func (l *raftLog) slice(lo, hi uint64) []Entry {
 	if lo > hi {
@@ -96,7 +92,8 @@ func (l *raftLog) compactTo(i, term uint64) {
 		rest := l.entries[i-l.snapIndex()+1:]
 		next := make([]Entry, 1, len(rest)+1)
 		next[0] = Entry{Index: i, Term: term}
-		l.entries = append(next, rest...)
+		next = append(next, rest...)
+		l.entries = next
 		return
 	}
 	l.entries = []Entry{{Index: i, Term: term}}
