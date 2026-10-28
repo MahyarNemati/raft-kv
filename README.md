@@ -252,12 +252,24 @@ appear in their latency at all. If it did, something would be wrong.
 ## Development
 
 ```bash
-make test      # unit + cluster + linearizability, race detector on
-make lint      # gofmt + vet
+make test       # unit + cluster + linearizability
+make test-race  # the same with the race detector (needs a working cgo toolchain)
+make lint       # gofmt + vet
 make bench
 ```
 
-Everything is pure Go, so `CGO_ENABLED=0` is set in the Makefile and CI.
+Two notes on the test setup, both of which cost time to discover:
+
+- **The race detector requires cgo**, so `make test` does not enable it and
+  `make test-race` does. CI runs the race detector on Linux. Pinning
+  `CGO_ENABLED=0` globally and then asking for `-race` fails with
+  `-race requires cgo`.
+- **Tests run with `-p 1`.** `cmd/raftkvctl` and `internal/bench` start real
+  clusters whose correctness depends on wall-clock Raft timeouts (300 ms
+  election by default). Run in parallel with the CPU-heavy cluster and
+  linearizability suites, they get starved and flake. Serialising fixes it;
+  the better fix, not yet done, is to drive those two suites from a
+  controllable clock the way the rest of the suite does.
 
 ## Limitations, stated plainly
 

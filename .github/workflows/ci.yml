@@ -13,8 +13,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  CGO_ENABLED: 0
+# NOTE: CGO_ENABLED is deliberately NOT forced to 0 here. The race detector
+# requires cgo, and the Linux runners have a working toolchain. Static builds
+# set CGO_ENABLED=0 per-step instead.
 
 jobs:
   test:
@@ -40,8 +41,13 @@ jobs:
 
       - run: go vet ./...
       - run: go build ./...
+      # -p 1: cmd/raftkvctl and internal/bench start real clusters driven by
+      # wall-clock Raft timeouts, so they flake when run alongside the
+      # CPU-heavy cluster suites. See the Makefile for the proper fix.
       - name: Test (race)
-        run: go test -race -count=1 ./...
+        env:
+          CGO_ENABLED: 1   # the race detector needs cgo
+        run: go test -p 1 -race -count=1 ./...
 
   linearizability:
     name: linearizability under fault injection
@@ -55,6 +61,8 @@ jobs:
       # Consensus bugs are often probabilistic, so the history checker runs
       # repeatedly rather than once.
       - name: Repeat the linearizability suite
+        env:
+          CGO_ENABLED: 1
         run: go test -race -count=5 -timeout 20m ./internal/cluster/...
 
   bench:
