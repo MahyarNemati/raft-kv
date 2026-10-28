@@ -137,11 +137,12 @@ func hashID(id NodeID) uint64 {
 func (n *Node) Start() {
 	n.mu.Lock()
 	n.resetElectionTimerLocked()
+	term, last, snap := n.term, n.log.lastIndex(), n.log.snapIndex()
 	n.mu.Unlock()
 	n.wg.Add(2)
 	go n.runTicker()
 	go n.runApplier()
-	n.logger.Info("raft node started", "term", n.term, "last_index", n.log.lastIndex(), "snapshot_index", n.log.snapIndex())
+	n.logger.Info("raft node started", "term", term, "last_index", last, "snapshot_index", snap)
 }
 
 // Stop halts the node and waits for its goroutines. It does not close storage.
