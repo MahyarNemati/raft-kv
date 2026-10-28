@@ -130,7 +130,7 @@ func trimToSnapshot(entries []raft.Entry, snap *raft.Snapshot) []raft.Entry {
 			return entries[i+1:]
 		}
 		if e.Index > idx {
-			if i == 0 {
+			if i == 0 && e.Index == idx+1 {
 				return entries
 			}
 			return nil
