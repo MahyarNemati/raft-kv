@@ -1,10 +1,13 @@
-/bin/
-/dist/
-/data/
-*.test
+
+# Build and local cluster artifacts
 *.out
-coverage.*
+*.test
+.DS_Store
 .env
 .idea/
 .vscode/
-.DS_Store
+/bin/
+/data/
+/dist/
+coverage.*
+coverage.out

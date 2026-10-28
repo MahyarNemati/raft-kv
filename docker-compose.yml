@@ -1,0 +1,46 @@
+# A 3-node cluster. Raft needs an odd number of nodes to form a majority;
+# three tolerates one failure.
+#
+#   docker compose up --build
+#   docker compose exec n1 raftkvctl -endpoints http://n1:7000 put hello world
+#   docker compose stop n1          # kill the leader and watch a new one win
+#   docker compose exec n2 raftkvctl -endpoints http://n2:7000 get hello
+
+x-node: &node
+  build: .
+  environment: &env
+    RAFTKV_PEERS: "n1=http://n1:7000,n2=http://n2:7000,n3=http://n3:7000"
+    RAFTKV_LISTEN: ":7000"
+    RAFTKV_DATA_DIR: "/data"
+    RAFTKV_LOG_FORMAT: "text"
+  restart: unless-stopped
+
+services:
+  n1:
+    <<: *node
+    environment:
+      <<: *env
+      RAFTKV_ID: "n1"
+    ports: ["7001:7000"]
+    volumes: ["n1:/data"]
+
+  n2:
+    <<: *node
+    environment:
+      <<: *env
+      RAFTKV_ID: "n2"
+    ports: ["7002:7000"]
+    volumes: ["n2:/data"]
+
+  n3:
+    <<: *node
+    environment:
+      <<: *env
+      RAFTKV_ID: "n3"
+    ports: ["7003:7000"]
+    volumes: ["n3:/data"]
+
+volumes:
+  n1:
+  n2:
+  n3:

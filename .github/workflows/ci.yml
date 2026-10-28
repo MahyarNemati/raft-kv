@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CGO_ENABLED: 0
+
+jobs:
+  test:
+    name: test (go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.24', '1.25']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      - name: Verify formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed on:"; echo "$unformatted"; exit 1
+          fi
+
+      - run: go vet ./...
+      - run: go build ./...
+      - name: Test (race)
+        run: go test -race -count=1 ./...
+
+  linearizability:
+    name: linearizability under fault injection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+      # Consensus bugs are often probabilistic, so the history checker runs
+      # repeatedly rather than once.
+      - name: Repeat the linearizability suite
+        run: go test -race -count=5 -timeout 20m ./internal/cluster/...
+
+  bench:
+    name: benchmarks run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+      - run: go test -run '^$' -bench . -benchtime 50x -benchmem ./...
+      - name: Short end-to-end benchmark
+        run: go run ./cmd/raftkv-bench -duration 2s -warmup 500ms -clients 8 -markdown
+
+  docker:
+    name: image builds and a 3-node cluster converges
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: raft-kv:ci
+      - name: Bring up the cluster and round-trip a key
+        run: |
+          docker compose up -d --wait --wait-timeout 90
+          # Give the cluster a moment to elect a leader.
+          for i in $(seq 1 30); do
+            if docker compose exec -T n1 raftkvctl -endpoints http://n1:7000 status; then break; fi
+            sleep 2
+          done
+          docker compose exec -T n1 raftkvctl -endpoints http://n1:7000 put ci-key ci-value
+          out=$(docker compose exec -T n2 raftkvctl -endpoints http://n2:7000 get ci-key)
+          echo "read back: $out"
+          echo "$out" | grep -q ci-value
+      - name: Cluster logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  tidy:
+    name: go.mod is tidy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+      - run: go mod tidy
+      - run: git diff --exit-code go.mod go.sum
