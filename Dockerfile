@@ -8,7 +8,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/raftkv    ./cmd/raftkv \
  && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/raftkvctl ./cmd/raftkvctl
 
-FROM alpine:3.21
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates \
  && adduser -D -u 10001 -h /data raftkv
 COPY --from=build /out/raftkv /out/raftkvctl /usr/local/bin/
